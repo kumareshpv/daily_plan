@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#EDEEF0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Planner">
+<title>Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ================================================================
+     The subject is speech. You talk, fragments arrive, they become
+     things you have to do. Used one-handed, in the morning, often
+     while moving — so the capture affordance lives in the thumb zone
+     at the bottom and is the loudest thing on screen. Everything
+     above it stays quiet.
+     ================================================================ */
+  :root{
+    --ground:#EDEEF0;
+    --ink:#000000;
+    --soft:#6E7278;
+    --faint:#C9CCD1;
+    --accent:#1B2FD8;
+    --on-accent:#FFFFFF;
+    --sheet:#FFFFFF;
+
+    --display:"Bricolage Grotesque",system-ui,sans-serif;
+    --body:"Instrument Sans",system-ui,-apple-system,sans-serif;
+
+    --gut:1.375rem;
+    --dock:6.5rem;           /* room the docked capture bar occupies */
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    background:var(--ground); color:var(--ink);
+    font-family:var(--body); font-size:17px; line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+    -webkit-tap-highlight-color:transparent;
+  }
+  button{font:inherit;border:none;background:none;color:inherit;cursor:pointer;padding:0;}
+  input{font:inherit;}
+  svg{display:block;}
+  :focus-visible{outline:2.5px solid var(--accent);outline-offset:3px;border-radius:3px;}
+
+  .page{
+    max-width:34rem;margin:0 auto;padding:0 var(--gut);
+    padding-bottom:calc(var(--dock) + env(safe-area-inset-bottom) + 1.5rem);
+    padding-top:calc(2rem + env(safe-area-inset-top));
+  }
+
+  /* ---------------- date ---------------- */
+  .datebar{display:flex;align-items:baseline;justify-content:space-between;gap:1rem;}
+  .when{min-width:0;}
+  .when h1{
+    font-family:var(--display);font-optical-sizing:auto;
+    font-size:2rem;font-weight:700;letter-spacing:-.025em;line-height:1.05;margin:0;
+  }
+  .when p{margin:.2rem 0 0;color:var(--soft);font-size:.9375rem;}
+
+  .step{display:flex;gap:.25rem;flex-shrink:0;}
+  .step button{
+    width:2.75rem;height:2.75rem;display:flex;align-items:center;justify-content:center;
+    border-radius:50%;color:var(--soft);
+  }
+  .step button:active{background:var(--faint);color:var(--ink);}
+  .step button[hidden]{display:none;}
+
+  .tally{display:flex;align-items:center;gap:.9rem;margin:1.75rem 0 .5rem;font-size:.9375rem;}
+  .tally .left{font-weight:600;}
+  .tally .rest{color:var(--soft);}
+  .tally button{color:var(--accent);font-weight:600;font-size:.9375rem;margin-left:auto;}
+  .tally button[hidden]{display:none;}
+
+  /* ---------------- rows ---------------- */
+  ul{list-style:none;margin:.5rem 0 0;padding:0;}
+  li{
+    display:flex;align-items:flex-start;gap:.85rem;
+    padding:.7rem 0;border-bottom:1px solid var(--faint);
+  }
+  li.fresh{animation:settle .34s cubic-bezier(.2,.8,.3,1) both;}
+  @keyframes settle{
+    from{opacity:0;transform:translateY(-6px);}
+    to{opacity:1;transform:none;}
+  }
+
+  .tick{
+    width:2.75rem;height:2.75rem;margin:-.55rem 0 -.55rem -.6rem;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;border-radius:50%;
+  }
+  .tick i{
+    width:1.35rem;height:1.35rem;border-radius:50%;border:2px solid var(--faint);
+    display:flex;align-items:center;justify-content:center;color:var(--sheet);
+  }
+  .tick.on i{background:var(--ink);border-color:var(--ink);}
+
+  .text{
+    flex:1;min-width:0;text-align:left;font-size:1.0625rem;line-height:1.4;
+    word-break:break-word;padding:.35rem 0;
+  }
+  .text.off{color:var(--soft);text-decoration:line-through;text-decoration-color:var(--faint);}
+
+  .edit{
+    flex:1;min-width:0;font-size:1.0625rem;background:var(--sheet);
+    border:none;border-bottom:2px solid var(--accent);outline:none;
+    padding:.3rem .4rem;color:var(--ink);border-radius:2px 2px 0 0;
+  }
+
+  .kill{
+    width:2.5rem;height:2.5rem;margin:-.4rem -.6rem -.4rem 0;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;border-radius:50%;color:var(--faint);
+  }
+  .kill:active{background:var(--faint);color:var(--ink);}
+
+  .blank{padding:3rem 0;color:var(--soft);font-size:.9375rem;}
+  .waiting{padding:3rem 0;color:var(--soft);font-size:.9375rem;}
+
+  /* ---------------- typed entry ---------------- */
+  .type{
+    display:flex;align-items:center;gap:.65rem;margin-top:1.25rem;
+    background:var(--sheet);border-radius:.75rem;padding:.8rem .95rem;
+  }
+  .type input{flex:1;min-width:0;background:none;border:none;outline:none;color:var(--ink);}
+  .type input::placeholder{color:var(--soft);}
+  .type .mark{color:var(--faint);flex-shrink:0;}
+
+  /* ---------------- notices ---------------- */
+  .say{
+    margin-top:1rem;border-radius:.75rem;padding:.85rem .95rem;font-size:.9375rem;line-height:1.45;
+    display:flex;gap:.6rem;align-items:flex-start;
+  }
+  .say[hidden]{display:none;}
+  .say.loud{background:var(--ink);color:var(--sheet);}
+  .say.calm{background:var(--sheet);color:var(--soft);}
+  .say span{flex:1;}
+  .say button{font-weight:600;text-decoration:underline;flex-shrink:0;color:inherit;}
+
+  .footnote{margin:1.25rem 0 0;font-size:.8125rem;line-height:1.55;color:var(--soft);}
+
+  /* ================================================================
+     DOCK — the hero. Thumb zone, full bleed, one accent.
+     ================================================================ */
+  .dock{
+    position:fixed;left:0;right:0;bottom:0;z-index:30;
+    background:linear-gradient(to top,var(--ground) 62%,rgba(237,238,240,0));
+    padding:1.25rem var(--gut) calc(1rem + env(safe-area-inset-bottom));
+    display:flex;flex-direction:column;align-items:center;gap:.75rem;
+  }
+  .heard{
+    width:100%;max-width:34rem;background:var(--sheet);border-radius:.85rem;
+    padding:.75rem .95rem;max-height:8rem;overflow-y:auto;font-size:.9375rem;line-height:1.45;
+  }
+  .heard[hidden]{display:none;}
+  .heard p{margin:0 0 .3rem;}
+  .heard p:last-child{margin-bottom:0;}
+  .heard .live{color:var(--soft);}
+  .heard p.fresh{animation:settle .28s cubic-bezier(.2,.8,.3,1) both;}
+
+  .talk{
+    width:100%;max-width:34rem;border-radius:1.5rem;background:var(--accent);color:var(--on-accent);
+    display:flex;align-items:center;justify-content:center;gap:.7rem;
+    padding:1.15rem 1.25rem;font-family:var(--display);font-size:1.125rem;font-weight:700;
+    letter-spacing:-.01em;transition:background .14s ease,transform .1s ease;
+    box-shadow:0 6px 20px rgba(27,47,216,.22);
+  }
+  .talk:active{transform:scale(.985);}
+  .talk.on{background:var(--ink);box-shadow:0 6px 20px rgba(0,0,0,.22);}
+  .talk:disabled{background:var(--faint);color:var(--soft);box-shadow:none;cursor:not-allowed;}
+
+  .meter{display:flex;align-items:flex-end;gap:3px;height:1.1rem;flex-shrink:0;}
+  .meter span{width:3px;background:currentColor;border-radius:2px;height:35%;}
+  .talk.on .meter span{animation:bob .9s ease-in-out infinite;}
+  .talk.on .meter span:nth-child(2){animation-delay:.15s;}
+  .talk.on .meter span:nth-child(3){animation-delay:.3s;}
+  .talk.on .meter span:nth-child(4){animation-delay:.45s;}
+  @keyframes bob{0%,100%{height:32%;}50%{height:100%;}}
+
+  .where{
+    font-size:.8125rem;color:var(--soft);display:flex;align-items:center;gap:.35rem;
+  }
+  .where[hidden]{display:none;}
+
+  .undo{
+    width:100%;max-width:34rem;background:var(--ink);color:var(--sheet);border-radius:.85rem;
+    display:flex;align-items:center;justify-content:space-between;gap:1rem;
+    padding:.8rem .95rem;font-size:.9375rem;
+  }
+  .undo[hidden]{display:none;}
+  .undo button{color:#9DA8FF;font-weight:600;}
+
+  @media (prefers-reduced-motion:reduce){
+    li.fresh,.heard p.fresh{animation:none;}
+    .talk.on .meter span{animation:none;height:70%;}
+    *{transition-duration:.01ms !important;}
+  }
+
+  @media (min-width:640px){
+    :root{--gut:2rem;}
+    .when h1{font-size:2.5rem;}
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="datebar">
+    <div class="when">
+      <h1 id="dayName"></h1>
+      <p id="dayFull"></p>
+    </div>
+    <div class="step">
+      <button id="prev" aria-label="Previous day"></button>
+      <button id="todayBtn" aria-label="Back to today" hidden></button>
+      <button id="next" aria-label="Next day"></button>
+    </div>
+  </div>
+
+  <div class="tally">
+    <span class="left" id="left"></span>
+    <span class="rest" id="rest"></span>
+    <button id="clearDone" hidden>Clear finished</button>
+  </div>
+
+  <div id="listArea"></div>
+
+  <div class="type">
+    <span class="mark" id="typeMark"></span>
+    <input id="draft" placeholder="Type a task" aria-label="New task" enterkeyhint="done">
+  </div>
+
+  <div class="say loud" id="micError" role="alert" hidden></div>
+  <div class="say calm" id="micNotice" hidden></div>
+  <div class="say calm" id="storageBanner" hidden></div>
+  <div class="say loud" id="saveBanner" role="alert" hidden></div>
+
+  <p class="footnote" id="footnote"></p>
+</div>
+
+<div class="dock">
+  <div class="undo" id="undoBar" hidden>
+    <span id="undoLabel"></span>
+    <button id="undoBtn">Undo</button>
+  </div>
+  <div class="heard" id="heard" hidden></div>
+  <button class="talk" id="talk" aria-pressed="false">
+    <span id="talkIcon"></span>
+    <span id="talkLabel">Speak your tasks</span>
+  </button>
+  <div class="where" id="where" hidden></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------------------------------------------------------------- */
+  /* Icons                                                            */
+  /* ---------------------------------------------------------------- */
+
+  var NS = "http://www.w3.org/2000/svg";
+  var PATHS = {
+    mic: ['M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z', 'M19 10v2a7 7 0 0 1-14 0v-2', 'M12 19v3'],
+    check: ['M20 6 9 17l-5-5'],
+    close: ['M18 6 6 18', 'm6 6 12 12'],
+    left: ['m15 18-6-6 6-6'],
+    right: ['m9 18 6-6-6-6'],
+    dot: ['M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z', 'M12 8v4', 'M12 16h.01'],
+    alert: ['M12 8v4', 'M12 16h.01', 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z'],
+    lock: ['M5 11h14v10H5z', 'M8 11V7a4 4 0 0 1 8 0v4'],
+    cloud: ['M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z'],
+    down: ['M12 3v12', 'm7 10 5 5 5-5', 'M5 21h14'],
+    plus: ['M5 12h14', 'M12 5v14'],
+    home: ['M3 10.5 12 3l9 7.5', 'M5 9.5V21h14V9.5']
+  };
+
+  function icon(name, size, stroke) {
+    var svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("width", size || 20);
+    svg.setAttribute("height", size || 20);
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", stroke || 2);
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("aria-hidden", "true");
+    (PATHS[name] || []).forEach(function (d) {
+      var p = document.createElementNS(NS, "path");
+      p.setAttribute("d", d);
+      svg.appendChild(p);
+    });
+    return svg;
+  }
+  function setIcon(el, name, size, stroke) {
+    if (!el) return;
+    el.textContent = "";
+    el.appendChild(icon(name, size, stroke));
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Dates                                                            */
+  /* ---------------------------------------------------------------- */
+
+  function pad(n) { return String(n).padStart(2, "0"); }
+  function keyOf(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function dateOf(k) { var a = k.split("-").map(Number); return new Date(a[0], a[1] - 1, a[2]); }
+  function shiftKey(k, delta) { var d = dateOf(k); d.setDate(d.getDate() + delta); return keyOf(d); }
+  var TODAY = keyOf(new Date());
+
+  function relName(k) {
+    if (k === TODAY) return "Today";
+    if (k === shiftKey(TODAY, 1)) return "Tomorrow";
+    if (k === shiftKey(TODAY, -1)) return "Yesterday";
+    return dateOf(k).toLocaleDateString("en-US", { weekday: "long" });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Storage                                                          */
+  /* ---------------------------------------------------------------- */
+
+  var memory = {};
+  var storageOk = (function () {
+    try {
+      localStorage.setItem("planner:__probe", "1");
+      localStorage.removeItem("planner:__probe");
+      return true;
+    } catch (e) { return false; }
+  })();
+
+  function readDay(k) {
+    if (!storageOk) return (memory[k] || []).slice();
+    try {
+      var raw = localStorage.getItem("planner:" + k);
+      if (!raw) return [];
+      var parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) { return (memory[k] || []).slice(); }
+  }
+
+  function writeDay(k, list) {
+    memory[k] = list.slice();
+    if (!storageOk) return false;
+    try { localStorage.setItem("planner:" + k, JSON.stringify(list)); return true; }
+    catch (e) { return false; }
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Transcript -> tasks                                              */
+  /*                                                                  */
+  /* Each finalized speech result is one task. The engine finalizes on */
+  /* a natural pause, so pauses are the separator — no splitting on    */
+  /* "and", which would shred "bread and butter" into two tasks.       */
+  /* ---------------------------------------------------------------- */
+
+  var EXPLICIT_BREAK = /\b(?:next task|new task|next up|and next)\b[,:.]?\s*/gi;
+  var LEAD_IN = /^(?:okay|ok|so|um|uh|please|hey)?[\s,]*(?:can you\s+)?(?:add (?:a |an )?(?:task|tasks|item)?(?:\s+to)?|remind me to|i need to|i have to|i gotta|make sure (?:i|to)|don't forget to|to-?do:?|todo:?)\s*/i;
+
+  function cleanTask(raw) {
+    var t = String(raw || "").trim();
+    if (!t) return "";
+    t = t.replace(LEAD_IN, "").trim();
+    t = t.replace(/[.\s]+$/, "").trim();
+    if (t.length < 2) return "";
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+  function tasksFromUtterance(u) {
+    return String(u || "").split(EXPLICIT_BREAK).map(cleanTask).filter(Boolean);
+  }
+
+  var seq = 0;
+  function makeId() { seq += 1; return "t" + Date.now().toString(36) + seq; }
+
+  function dedupe(list) {
+    var seen = {};
+    return list.filter(function (s) {
+      var k = s.toLowerCase();
+      if (seen[k]) return false;
+      seen[k] = true; return true;
+    });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* State                                                            */
+  /* ---------------------------------------------------------------- */
+
+  var state = {
+    dateKey: TODAY, tasks: [], loading: true, saveFailed: false,
+    editingId: null, undo: null, recording: false, interim: "", heard: [],
+    micError: null, micNotice: null, localMode: "checking", fresh: {}
+  };
+
+  var pendingSave = null, undoTimer = null;
+
+  var el = {};
+  ["prev","next","todayBtn","dayName","dayFull","left","rest","clearDone","listArea",
+   "draft","typeMark","micError","micNotice","storageBanner","saveBanner","footnote",
+   "undoBar","undoLabel","undoBtn","heard","talk","talkIcon","talkLabel","where"]
+    .forEach(function (id) { el[id] = document.getElementById(id); });
+
+  /* ---------------------------------------------------------------- */
+  /* Speech                                                           */
+  /* ---------------------------------------------------------------- */
+
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var LANG = "en-US";
+  var SECURE = window.isSecureContext !== false;
+
+  var recognition = null, recordingFlag = false;
+  var utterances = [], interimText = "", captureDate = TODAY;
+  var restartCount = 0, restartWindow = 0;
+
+  function micUsable() { return Boolean(SR) && SECURE; }
+
+  function checkLocalMode() {
+    if (!micUsable()) { state.localMode = "unsupported"; return; }
+    if (typeof SR.available !== "function") { state.localMode = "off"; render(); return; }
+    SR.available({ langs: [LANG], processLocally: true }).then(function (s) {
+      state.localMode = s === "available" ? "on"
+        : s === "downloadable" ? "downloadable"
+        : s === "downloading" ? "downloading" : "off";
+      render();
+    }).catch(function () { state.localMode = "off"; render(); });
+  }
+
+  function installLocal() {
+    if (!SR || typeof SR.install !== "function") return;
+    state.localMode = "downloading"; render();
+    SR.install({ langs: [LANG], processLocally: true }).then(function (ok) {
+      state.localMode = ok ? "on" : "off";
+      if (!ok) state.micNotice = "The on-device model isn't available. Speech goes to the cloud service instead.";
+      render();
+    }).catch(function () {
+      state.localMode = "off";
+      state.micNotice = "The on-device model couldn't be installed.";
+      render();
+    });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Persistence                                                      */
+  /* ---------------------------------------------------------------- */
+
+  function commit(dateKey, list) {
+    var ok = writeDay(dateKey, list);
+    if (ok) { pendingSave = null; state.saveFailed = false; }
+    else { pendingSave = { dateKey: dateKey, list: list }; state.saveFailed = true; }
+    return ok;
+  }
+
+  // Every mutation goes through here, reading state.tasks directly so two
+  // changes in the same tick can't clobber each other.
+  function mutate(updater, undoLabel) {
+    var prev = state.tasks;
+    var next = updater(prev);
+    if (undoLabel) {
+      if (undoTimer) clearTimeout(undoTimer);
+      state.undo = { label: undoLabel, snapshot: prev, dateKey: state.dateKey };
+      undoTimer = setTimeout(function () { state.undo = null; render(); }, 7000);
+    }
+    state.tasks = next;
+    commit(state.dateKey, next);
+    render();
+  }
+
+  function loadDay(k) {
+    state.dateKey = k; state.loading = true; state.editingId = null;
+    state.fresh = {};
+    render();
+    state.tasks = readDay(k);
+    state.loading = false;
+    render();
+  }
+
+  // Voice capture targets the day selected when recording started, even if
+  // you navigated away mid-take.
+  function addTasksToDate(dateKey, texts) {
+    var fresh = dedupe(texts).map(function (text) {
+      return { id: makeId(), text: text, done: false };
+    });
+    if (!fresh.length) return;
+    fresh.forEach(function (t) { state.fresh[t.id] = true; });
+
+    if (dateKey === state.dateKey) {
+      mutate(function (prev) { return prev.concat(fresh); });
+    } else {
+      var existing = readDay(dateKey);
+      commit(dateKey, existing.concat(fresh));
+      state.micNotice = "Saved to " + relName(dateKey).toLowerCase() + " — that's the day you were on when you started.";
+      render();
+    }
+    setTimeout(function () { state.fresh = {}; }, 700);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Recording                                                        */
+  /* ---------------------------------------------------------------- */
+
+  function finalize() {
+    var chunks = utterances.slice();
+    if (interimText.trim()) chunks.push(interimText.trim());
+    utterances = []; interimText = "";
+    state.interim = ""; state.heard = [];
+    var texts = [];
+    chunks.forEach(function (c) { texts = texts.concat(tasksFromUtterance(c)); });
+    if (texts.length) addTasksToDate(captureDate, texts);
+    else if (!chunks.length) { state.micNotice = "Nothing came through. Try again a bit closer to the mic."; render(); }
+  }
+
+  // The mic must not outlive the page. Handlers detach before stopping so a
+  // teardown can't re-trigger the restart logic.
+  function teardown() {
+    recordingFlag = false;
+    var rec = recognition;
+    recognition = null;
+    if (!rec) return;
+    rec.onresult = null; rec.onerror = null; rec.onend = null;
+    try { rec.stop(); } catch (e) {}
+    try { rec.abort(); } catch (e) {}
+  }
+
+  function stopRecording() {
+    if (!recordingFlag) return;
+    teardown();
+    state.recording = false;
+    finalize();
+    render();
+  }
+
+  function startRecording() {
+    if (!SR) {
+      state.micError = "This browser can't do speech recognition. Chrome or Edge can — typing works here either way.";
+      render(); return;
+    }
+    if (!SECURE) {
+      state.micError = "Speech needs this page served over https or localhost. Opened straight from a downloaded file, the microphone stays blocked.";
+      render(); return;
+    }
+    if (recordingFlag) return;
+
+    var useLocal = state.localMode === "on";
+    var rec = new SR();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = LANG;
+    if (useLocal) { try { rec.processLocally = true; } catch (e) {} }
+
+    rec.onresult = function (e) {
+      var pending = "";
+      for (var i = e.resultIndex; i < e.results.length; i++) {
+        var alt = e.results[i][0];
+        if (!alt) continue;
+        if (e.results[i].isFinal) {
+          var t = alt.transcript.trim();
+          if (t) utterances.push(t);   // one finalized utterance = one task
+        } else { pending += alt.transcript; }
+      }
+      interimText = pending;
+      state.interim = pending;
+      state.heard = utterances.slice();
+      renderDock();
+    };
+
+    rec.onerror = function (e) {
+      var code = e && e.error;
+      if (code === "no-speech" || code === "aborted") return;
+      if (code === "not-allowed" || code === "service-not-allowed") {
+        state.micError = "The microphone is blocked. Allow it in the site settings for this page, then try again.";
+      } else if (code === "network") {
+        state.micError = "The speech service couldn't be reached. Check your connection.";
+      } else {
+        state.micError = "Recording stopped (" + (code || "unknown error") + ").";
+      }
+      recordingFlag = false;
+      state.recording = false;
+      render();
+    };
+
+    // Safari and iOS ignore `continuous` and end after each utterance. The
+    // restart keeps the session alive there, capped so a browser that refuses
+    // to stay open can't spin forever.
+    rec.onend = function () {
+      if (!recordingFlag) return;
+      var now = Date.now();
+      if (now - restartWindow > 12000) { restartWindow = now; restartCount = 0; }
+      restartCount += 1;
+      if (restartCount > 8) {
+        teardown();
+        state.recording = false;
+        state.micNotice = "The browser kept closing the session. Everything heard so far is saved.";
+        finalize(); render(); return;
+      }
+      try { rec.start(); } catch (e) {}
+    };
+
+    recognition = rec;
+    utterances = []; interimText = "";
+    restartCount = 0; restartWindow = Date.now();
+    captureDate = state.dateKey;
+    state.heard = []; state.interim = "";
+    state.micError = null; state.micNotice = null;
+    recordingFlag = true;
+    state.recording = true;
+
+    try { rec.start(); }
+    catch (e) {
+      teardown();
+      state.recording = false;
+      state.micError = "The microphone didn't start. Try again.";
+    }
+    render();
+  }
+
+  window.addEventListener("pagehide", teardown);
+  window.addEventListener("beforeunload", teardown);
+
+  /* ---------------------------------------------------------------- */
+  /* Render                                                           */
+  /* ---------------------------------------------------------------- */
+
+  function renderHead() {
+    var d = dateOf(state.dateKey);
+    el.dayName.textContent = relName(state.dateKey);
+    el.dayFull.textContent = d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+    el.todayBtn.hidden = state.dateKey === TODAY;
+
+    var remaining = state.tasks.filter(function (t) { return !t.done; }).length;
+    var done = state.tasks.length - remaining;
+
+    if (!state.tasks.length) { el.left.textContent = ""; el.rest.textContent = ""; }
+    else {
+      el.left.textContent = remaining === 0 ? "All done" : remaining + (remaining === 1 ? " to go" : " to go");
+      el.rest.textContent = done ? done + " finished" : "";
+    }
+    el.clearDone.hidden = done === 0;
+  }
+
+  function renderDock() {
+    el.talk.disabled = !micUsable();
+    el.talk.classList.toggle("on", state.recording);
+    el.talk.setAttribute("aria-pressed", state.recording ? "true" : "false");
+
+    el.talkIcon.textContent = "";
+    if (state.recording) {
+      var m = document.createElement("span");
+      m.className = "meter";
+      for (var i = 0; i < 4; i++) m.appendChild(document.createElement("span"));
+      el.talkIcon.appendChild(m);
+    } else {
+      el.talkIcon.appendChild(icon("mic", 20));
+    }
+
+    el.talkLabel.textContent = !SR ? "Speech not available here"
+      : !SECURE ? "Speech needs a hosted page"
+      : state.recording ? "Listening — tap when done"
+      : "Speak your tasks";
+
+    var showWhere = micUsable() && state.localMode !== "checking";
+    el.where.hidden = !showWhere;
+    if (showWhere) {
+      el.where.textContent = "";
+      var onDevice = state.localMode === "on";
+      el.where.appendChild(icon(onDevice ? "lock" : "cloud", 13));
+      var w = document.createElement("span");
+      w.textContent = onDevice ? "Stays on this phone" : "Sent to the speech service";
+      el.where.appendChild(w);
+      if (state.localMode === "downloadable" || state.localMode === "downloading") {
+        var b = document.createElement("button");
+        b.style.cssText = "color:var(--accent);font-weight:600;margin-left:.3rem;";
+        b.textContent = state.localMode === "downloading" ? "Downloading…" : "Keep it on device";
+        b.disabled = state.localMode === "downloading";
+        b.addEventListener("click", installLocal);
+        el.where.appendChild(b);
+      }
+    }
+
+    var showHeard = state.heard.length > 0 || state.interim;
+    el.heard.hidden = !showHeard;
+    if (showHeard) {
+      el.heard.textContent = "";
+      state.heard.forEach(function (line) {
+        var p = document.createElement("p");
+        p.className = "fresh";
+        p.textContent = line;
+        el.heard.appendChild(p);
+      });
+      if (state.interim) {
+        var ip = document.createElement("p");
+        ip.className = "live";
+        ip.textContent = state.interim;
+        el.heard.appendChild(ip);
+      }
+      el.heard.scrollTop = el.heard.scrollHeight;
+    }
+
+    el.undoBar.hidden = !state.undo;
+    if (state.undo) el.undoLabel.textContent = state.undo.label;
+  }
+
+  function renderNotices() {
+    el.micError.hidden = !state.micError;
+    if (state.micError) {
+      el.micError.textContent = "";
+      el.micError.appendChild(icon("alert", 17));
+      var a = document.createElement("span"); a.textContent = state.micError;
+      el.micError.appendChild(a);
+    }
+
+    el.micNotice.hidden = !state.micNotice || Boolean(state.micError);
+    if (state.micNotice) el.micNotice.textContent = state.micNotice;
+
+    el.storageBanner.hidden = storageOk;
+    if (!storageOk) el.storageBanner.textContent = "This browser is blocking storage, so tasks won't survive closing the tab. Hosting the page fixes it.";
+
+    el.saveBanner.hidden = !state.saveFailed || !storageOk;
+    if (state.saveFailed && storageOk) {
+      el.saveBanner.textContent = "";
+      el.saveBanner.appendChild(icon("alert", 17));
+      var m = document.createElement("span");
+      m.textContent = "That last change didn't save. It'll be lost if you leave.";
+      el.saveBanner.appendChild(m);
+      var r = document.createElement("button");
+      r.textContent = "Try again";
+      r.addEventListener("click", function () {
+        if (pendingSave) { commit(pendingSave.dateKey, pendingSave.list); render(); }
+      });
+      el.saveBanner.appendChild(r);
+    }
+
+    el.footnote.textContent = "Pause between tasks and each pause starts a new one. Say \u201Cnext task\u201D to break without pausing." +
+      (state.localMode === "on" ? "" : micUsable() ? " Speech is transcribed by the browser's service, not on your phone." : "");
+  }
+
+  function renderList() {
+    el.listArea.textContent = "";
+
+    if (state.loading) {
+      var w = document.createElement("div");
+      w.className = "waiting"; w.textContent = "Opening your day…";
+      el.listArea.appendChild(w); return;
+    }
+
+    if (!state.tasks.length) {
+      var b = document.createElement("div");
+      b.className = "blank";
+      b.textContent = state.dateKey === TODAY
+        ? "Nothing here yet. Tap the button below and say what today looks like."
+        : "Nothing planned for this day.";
+      el.listArea.appendChild(b); return;
+    }
+
+    var ul = document.createElement("ul");
+    state.tasks.forEach(function (task) {
+      var li = document.createElement("li");
+      if (state.fresh[task.id]) li.className = "fresh";
+
+      var tick = document.createElement("button");
+      tick.className = "tick" + (task.done ? " on" : "");
+      tick.setAttribute("role", "checkbox");
+      tick.setAttribute("aria-checked", task.done ? "true" : "false");
+      tick.setAttribute("aria-label", task.text);
+      var ring = document.createElement("i");
+      if (task.done) ring.appendChild(icon("check", 13, 3));
+      tick.appendChild(ring);
+      tick.addEventListener("click", function () {
+        mutate(function (prev) {
+          return prev.map(function (t) {
+            return t.id === task.id ? { id: t.id, text: t.text, done: !t.done } : t;
+          });
+        });
+      });
+      li.appendChild(tick);
+
+      if (state.editingId === task.id) {
+        var input = document.createElement("input");
+        input.className = "edit";
+        input.value = task.text;
+        input.setAttribute("aria-label", "Edit task");
+        input.setAttribute("enterkeyhint", "done");
+        var committed = false;
+        var save = function () {
+          if (committed) return;
+          committed = true;
+          var text = input.value.trim();
+          state.editingId = null;
+          if (!text) {
+            mutate(function (prev) {
+              return prev.filter(function (t) { return t.id !== task.id; });
+            }, "Task removed");
+          } else {
+            mutate(function (prev) {
+              return prev.map(function (t) {
+                return t.id === task.id ? { id: t.id, text: text, done: t.done } : t;
+              });
+            });
+          }
+        };
+        input.addEventListener("blur", save);
+        input.addEventListener("keydown", function (ev) {
+          if (ev.key === "Enter") save();
+          if (ev.key === "Escape") { committed = true; state.editingId = null; render(); }
+        });
+        li.appendChild(input);
+        setTimeout(function () { input.focus(); input.select(); }, 0);
+      } else {
+        var txt = document.createElement("button");
+        txt.className = "text" + (task.done ? " off" : "");
+        txt.textContent = task.text;
+        txt.title = "Tap to edit";
+        txt.addEventListener("click", function () { state.editingId = task.id; render(); });
+        li.appendChild(txt);
+      }
+
+      // Always visible: a hover-only control is unreachable on touch.
+      var kill = document.createElement("button");
+      kill.className = "kill";
+      kill.setAttribute("aria-label", "Remove: " + task.text);
+      kill.appendChild(icon("close", 17));
+      kill.addEventListener("click", function () {
+        mutate(function (prev) {
+          return prev.filter(function (t) { return t.id !== task.id; });
+        }, "Task removed");
+      });
+      li.appendChild(kill);
+
+      ul.appendChild(li);
+    });
+    el.listArea.appendChild(ul);
+  }
+
+  function render() { renderHead(); renderDock(); renderNotices(); renderList(); }
+
+  /* ---------------------------------------------------------------- */
+  /* Wiring                                                           */
+  /* ---------------------------------------------------------------- */
+
+  setIcon(el.prev, "left", 20);
+  setIcon(el.next, "right", 20);
+  setIcon(el.todayBtn, "home", 19);
+  setIcon(el.typeMark, "plus", 18);
+
+  el.prev.addEventListener("click", function () { loadDay(shiftKey(state.dateKey, -1)); });
+  el.next.addEventListener("click", function () { loadDay(shiftKey(state.dateKey, 1)); });
+  el.todayBtn.addEventListener("click", function () { loadDay(TODAY); });
+
+  el.talk.addEventListener("click", function () {
+    if (state.recording) stopRecording(); else startRecording();
+  });
+
+  el.draft.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter") return;
+    var text = el.draft.value.trim();
+    if (!text) return;
+    el.draft.value = "";
+    var id = makeId();
+    state.fresh[id] = true;
+    mutate(function (prev) { return prev.concat([{ id: id, text: text, done: false }]); });
+    setTimeout(function () { state.fresh = {}; }, 700);
+  });
+
+  el.clearDone.addEventListener("click", function () {
+    mutate(function (prev) { return prev.filter(function (t) { return !t.done; }); }, "Finished tasks cleared");
+  });
+
+  el.undoBtn.addEventListener("click", function () {
+    if (!state.undo) return;
+    var u = state.undo;
+    if (u.dateKey === state.dateKey) state.tasks = u.snapshot;
+    commit(u.dateKey, u.snapshot);
+    state.undo = null;
+    if (undoTimer) clearTimeout(undoTimer);
+    render();
+  });
+
+  checkLocalMode();
+  loadDay(TODAY);
+})();
+</script>
+</body>
+</html>
