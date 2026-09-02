@@ -360,11 +360,20 @@
 
   var EXPLICIT_BREAK = /\b(?:next task|new task|next up|and next)\b[,:.]?\s*/gi;
   var LEAD_IN = /^(?:okay|ok|so|um|uh|please|hey)?[\s,]*(?:can you\s+)?(?:add (?:a |an )?(?:task|tasks|item)?(?:\s+to)?|remind me to|i need to|i have to|i gotta|make sure (?:i|to)|don't forget to|to-?do:?|todo:?)\s*/i;
+  // A bare discourse filler at the start, with nothing structured after it
+  // (no "remind me to" etc.) — "so buy milk" said mid-thought. Stripped
+  // separately from LEAD_IN so it doesn't require a command phrase to fire.
+  var FILLER_START = /^(?:so|okay|ok|well|um+|uh+|like)[\s,]+/i;
 
   function cleanTask(raw) {
     var t = String(raw || "").trim();
     if (!t) return "";
     t = t.replace(LEAD_IN, "").trim();
+    for (var guard = 0; guard < 2; guard++) {
+      var stripped = t.replace(FILLER_START, "").trim();
+      if (stripped === t) break;
+      t = stripped;
+    }
     t = t.replace(/[.\s]+$/, "").trim();
     if (t.length < 2) return "";
     return t.charAt(0).toUpperCase() + t.slice(1);
@@ -383,6 +392,33 @@
       if (seen[k]) return false;
       seen[k] = true; return true;
     });
+  }
+
+  function normalizeUtterance(s) {
+    return s.trim().toLowerCase().replace(/[.,!?]+$/, "");
+  }
+
+  // Android's speech engine periodically re-finalizes the whole sentence as
+  // it grows, instead of finalizing just the new word — so a single spoken
+  // task can arrive as ten "final" results, each one word longer than the
+  // last. Pushing every one of those as a separate task is what produced the
+  // runaway "So / So whatever / So whatever I / ..." list. Collapse a result
+  // into the previous entry when one is a prefix of the other; only a result
+  // that isn't a continuation becomes a new task.
+  function pushFinal(list, text) {
+    var t = text.trim();
+    if (!t) return;
+    var lastIdx = list.length - 1;
+    if (lastIdx >= 0) {
+      var prevNorm = normalizeUtterance(list[lastIdx]);
+      var curNorm = normalizeUtterance(t);
+      if (curNorm === prevNorm) return;
+      if (curNorm.indexOf(prevNorm) === 0 || prevNorm.indexOf(curNorm) === 0) {
+        if (curNorm.length >= prevNorm.length) list[lastIdx] = t;
+        return;
+      }
+    }
+    list.push(t);
   }
 
   /* ---------------------------------------------------------------- */
@@ -556,8 +592,7 @@
         var alt = e.results[i][0];
         if (!alt) continue;
         if (e.results[i].isFinal) {
-          var t = alt.transcript.trim();
-          if (t) utterances.push(t);   // one finalized utterance = one task
+          pushFinal(utterances, alt.transcript);
         } else { pending += alt.transcript; }
       }
       interimText = pending;
